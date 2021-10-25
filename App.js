@@ -7,7 +7,7 @@
  * @flow strict-local
  */
 
-import React, {useState, useReducer, useEffect} from 'react';
+import React, {useState, useReducer, useEffect, useCallback} from 'react';
 import {
   SafeAreaView,
   StatusBar,
@@ -17,13 +17,18 @@ import {
   View,
   TouchableOpacity,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 
 import {getIssues} from './src/services';
-import {SORT_BY_TYPE} from './src/const';
+import {SORT_BY_TYPE, ACTIONS, OWNER_REPO} from './src/const';
 import {initialState, reducer} from './src/reducer';
 
 import {Colors} from 'react-native/Libraries/NewAppScreen';
+import {TopMenu} from './src/components/TopMenu';
+import {NavigationMenu} from './src/components/NavigationMenu';
+import {OwnerRepoInput} from './src/components/OwnerRepoInput';
 
 const App = () => {
   const isDarkMode = useColorScheme() === 'dark';
@@ -35,34 +40,30 @@ const App = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [page, setPage] = useState(1);
   const [sortType, setSortType] = useState(SORT_BY_TYPE.CREATED);
+  const [ownerRepo, onChangeOwnerRepo] = useState(OWNER_REPO);
 
-  const getPreviousPage = () => {
+  const getPreviousPage = useCallback(() => {
     const newPage = page - 1;
     setPage(newPage);
-  };
+  }, [page]);
 
-  const getNextPage = () => {
+  const getNextPage = useCallback(() => {
     const newPage = page + 1;
     setPage(newPage);
-  };
+  }, [page]);
 
-  const getData = async () => {
-    console.log('getData', page);
-    try {
-      const result = await getIssues('', {
-        page: page,
-        state: 'open',
-        sort: sortType,
-      });
-      dispatch({type: 'ADD_ISSUES', issues: result});
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  const getData = useCallback(async () => {
+    const result = await getIssues(ownerRepo, {
+      page: page,
+      state: 'open',
+      sort: sortType,
+    });
+    dispatch({type: ACTIONS.ADD_ISSUES, issues: result});
+  }, [page, sortType, ownerRepo]);
 
   useEffect(() => {
     getData();
-  }, [sortType, page]);
+  }, [sortType, page, ownerRepo]);
 
   const renderItem = ({item}) => {
     return (
@@ -78,85 +79,39 @@ const App = () => {
       </TouchableOpacity>
     );
   };
-
   return (
-    <SafeAreaView style={[backgroundStyle, styles.container]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-
-      <View style={styles.topMenuContainer}>
-        <Text>Sort by: </Text>
-        <View style={styles.topMenuContainer}>
-          <TouchableOpacity
-            style={
-              sortType === SORT_BY_TYPE.CREATED
-                ? styles.topMenuSortItemSelected
-                : styles.topMenuSortItem
-            }
-            onPress={() => {
-              setSortType(SORT_BY_TYPE.CREATED);
-            }}>
-            <Text>Created</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={
-              sortType === SORT_BY_TYPE.UPDATED
-                ? styles.topMenuSortItemSelected
-                : styles.topMenuSortItem
-            }
-            onPress={() => {
-              setSortType(SORT_BY_TYPE.UPDATED);
-            }}>
-            <Text>Updated</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={
-              sortType === SORT_BY_TYPE.COMMENTS
-                ? styles.topMenuSortItemSelected
-                : styles.topMenuSortItem
-            }
-            onPress={() => {
-              setSortType(SORT_BY_TYPE.COMMENTS);
-            }}>
-            <Text>Comments</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      <FlatList
-        data={state.issuesList}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-      />
-      {page === 0 ? (
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => {
-            getData(1);
-          }}>
-          <Text>{'LOAD ISSUES'}</Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={styles.navigationMenuContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              if (page <= 1) {
-                return;
-              }
-              getPreviousPage();
-            }}>
-            <Text>{'Previous page'}</Text>
-          </TouchableOpacity>
-          <Text>{page}</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => {
-              getNextPage();
-            }}>
-            <Text>{'Next page'}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </SafeAreaView>
+    <KeyboardAvoidingView
+      style={[backgroundStyle, styles.container]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <SafeAreaView style={[backgroundStyle, styles.container]}>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <TopMenu sortType={sortType} setSortType={setSortType} />
+        {state.issuesList.message ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{state.issuesList.message}</Text>
+          </View>
+        ) : !state.issuesList || state.issuesList.length === 0 ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>No issues</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={state.issuesList}
+            renderItem={renderItem}
+            keyExtractor={item => item.id}
+          />
+        )}
+        <OwnerRepoInput
+          ownerRepo={ownerRepo}
+          onChangeOwnerRepo={onChangeOwnerRepo}
+        />
+        <NavigationMenu
+          page={page}
+          getNextPage={getNextPage}
+          getPreviousPage={getPreviousPage}
+        />
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -182,30 +137,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#dcffd6',
     marginLeft: 10,
   },
-  button: {
-    alignItems: 'center',
-    backgroundColor: 'azure',
+  errorContainer: {
+    flex: 1,
   },
-  topMenuContainer: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginBottom: 10,
-  },
-  topMenuSortItemSelected: {
-    backgroundColor: '#fffceb',
-    borderColor: 'beige',
-    borderWidth: 2,
-    marginHorizontal: 10,
-  },
-  topMenuSortItem: {
-    borderColor: 'beige',
-    borderWidth: 2,
-    marginHorizontal: 10,
-  },
-  navigationMenuContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginHorizontal: 20,
+  errorText: {
+    padding: 20,
+    backgroundColor: '#ffdee1',
   },
 });
 

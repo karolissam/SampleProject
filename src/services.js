@@ -1,7 +1,7 @@
-export const getIssues = async (baseUrl, params) => {
+export const getIssues = async (ownerRepo, params) => {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/public-apis/public-apis/issues?page=${params.page}&state=${params.state}&per_page=10&sort=${params.sort}`,
+      `https://api.github.com/repos/${ownerRepo}/issues?page=${params.page}&state=${params.state}&per_page=10&sort=${params.sort}`,
       {
         method: 'GET',
         headers: {
@@ -10,9 +10,8 @@ export const getIssues = async (baseUrl, params) => {
       },
     );
     const json = await response.json();
-    console.log(json);
     return json;
   } catch (error) {
-    console.error(error);
+    return {message: 'Wrong request'};
   }
 };
